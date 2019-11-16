@@ -20,6 +20,7 @@ namespace MessagePack
         True,         // true
         False,        // false
         Null,         // null
+        Comment,      // //___\n
     }
 
     internal enum ValueType : byte
@@ -31,7 +32,8 @@ namespace MessagePack
         Long,
         ULong,
         Decimal,
-        String
+        String,
+        Comment
     }
 
     internal class TinyJsonException : Exception
@@ -55,6 +57,7 @@ namespace MessagePack
         public ulong ULongValue { get; private set; }
         public decimal DecimalValue { get; private set; }
         public string StringValue { get; private set; }
+        public string CommentValue { get; private set; }
 
         public TinyJsonReader(TextReader reader, bool disposeInnerReader = true)
         {
@@ -168,6 +171,9 @@ namespace MessagePack
                     reader.Read();
                     ReadNextToken();
                     return;
+                case '/':
+                    TokenType = TinyJsonToken.Comment;
+                    return;
                 default:
                     throw new TinyJsonException("Invalid String:" + c);
             }
@@ -214,6 +220,9 @@ namespace MessagePack
                     if (ReadChar() != 'l') throw new TinyJsonException("Invalid Token");
                     if (ReadChar() != 'l') throw new TinyJsonException("Invalid Token");
                     ValueType = ValueType.Null;
+                    break;
+                case TinyJsonToken.Comment:
+                    ReadComment();
                     break;
                 default:
                     throw new ArgumentException("InvalidTokenState:" + TokenType);
@@ -350,6 +359,40 @@ namespace MessagePack
             END:
             ValueType = ValueType.String;
             StringValue = sb.ToString();
+        }
+
+        void ReadComment()
+        {
+            reader.Read(); // skip [/]
+            reader.Read(); // skip [/]
+
+            StringBuilder sb;
+            if (reusableBuilder == null)
+            {
+                reusableBuilder = new StringBuilder();
+                sb = reusableBuilder;
+            }
+            else
+            {
+                sb = reusableBuilder;
+                sb.Length = 0; // Clear
+            }
+
+            while (true)
+            {
+                var c = ReadChar();
+                if (c == '\n')
+                {
+                    break;
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            ValueType = ValueType.Comment;
+            CommentValue = sb.ToString();
         }
     }
 }

@@ -307,5 +307,10 @@ namespace MessagePack.Internal
             }
             return buffer;
         }
+
+        public static void SetBuffer(byte[] value)
+        {
+            buffer = value;
+        }
     }
 }

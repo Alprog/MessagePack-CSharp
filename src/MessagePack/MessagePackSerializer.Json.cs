@@ -1,4 +1,5 @@
-﻿using MessagePack.Formatters;
+﻿using DarkCrystal.Serialization;
+using MessagePack.Formatters;
 using MessagePack.Internal;
 using System;
 using System.Globalization;
@@ -10,6 +11,24 @@ namespace MessagePack
     // JSON API
     public static partial class MessagePackSerializer
     {
+        [ThreadStatic] public static int m_tabCount;
+        [ThreadStatic] public static string m_tabulation;
+
+        public static int TabCount
+        {
+            get
+            {
+                return m_tabCount;
+            }
+            set
+            {
+                m_tabCount = value;
+                m_tabulation = new string('\t', m_tabCount);
+            }
+        }
+
+        public static string Tabulation => m_tabulation;
+
         /// <summary>
         /// Dump to JSON string.
         /// </summary>
@@ -111,7 +130,7 @@ namespace MessagePack
                         var v = jr.ValueType;
                         if (v == ValueType.Double)
                         {
-                            offset += MessagePackBinary.WriteDouble(ref binary, offset, jr.DoubleValue);
+                            offset += MessagePackBinary.WriteSingle(ref binary, offset, (float)jr.DoubleValue);
                         }
                         else if (v == ValueType.Long)
                         {
@@ -142,6 +161,9 @@ namespace MessagePack
                     case TinyJsonToken.Null:
                         offset += MessagePackBinary.WriteNil(ref binary, offset);
                         count++;
+                        break;
+                    case TinyJsonToken.Comment:
+                        //offset += MessagePackBinaryExtension.WriteComment(ref binary, offset, jr.CommentValue);
                         break;
                     default:
                         break;
@@ -194,18 +216,23 @@ namespace MessagePack
                         var length = MessagePackBinary.ReadArrayHeaderRaw(bytes, offset, out readSize);
                         var totalReadSize = readSize;
                         offset += readSize;
-                        builder.Append("[");
+                        builder.Append("[\n");
+                        TabCount++;
                         for (int i = 0; i < length; i++)
                         {
+                            builder.Append(Tabulation);
                             readSize = ToJsonCore(bytes, offset, builder);
                             offset += readSize;
                             totalReadSize += readSize;
 
                             if (i != length - 1)
                             {
-                                builder.Append(",");
+                                builder.Append(",\n");
                             }
                         }
+                        TabCount--;
+                        builder.Append("\n");
+                        builder.Append(Tabulation);
                         builder.Append("]");
 
                         return totalReadSize;
@@ -215,9 +242,12 @@ namespace MessagePack
                         var length = MessagePackBinary.ReadMapHeaderRaw(bytes, offset, out readSize);
                         var totalReadSize = readSize;
                         offset += readSize;
-                        builder.Append("{");
+                        builder.Append("{\n");
+                        TabCount++;
                         for (int i = 0; i < length; i++)
                         {
+                            builder.Append(Tabulation);
+
                             // write key
                             {
                                 var keyType = MessagePackBinary.GetMessagePackType(bytes, offset);
@@ -227,15 +257,16 @@ namespace MessagePack
                                 }
                                 else
                                 {
-                                    builder.Append("\"");
+                                    //builder.Append("\"");
                                     readSize = ToJsonCore(bytes, offset, builder);
-                                    builder.Append("\"");
+                                    //builder.Append("\"");
                                 }
                                 offset += readSize;
                                 totalReadSize += readSize;
                             }
 
-                            builder.Append(":");
+                            builder.Append(":\n");
+                            builder.Append(Tabulation);
 
                             // write body
                             {
@@ -246,9 +277,12 @@ namespace MessagePack
 
                             if (i != length - 1)
                             {
-                                builder.Append(",");
+                                builder.Append(",\n");
                             }
                         }
+                        TabCount--;
+                        builder.Append("\n");
+                        builder.Append(Tabulation);
                         builder.Append("}");
 
                         return totalReadSize;
@@ -262,6 +296,18 @@ namespace MessagePack
                         builder.Append(dt.ToString("o", CultureInfo.InvariantCulture));
                         builder.Append("\"");
                     }
+
+                    else if (extHeader.TypeCode == DarkCrystal.Serialization.MessagePackBinaryExtension.CommentTypeCode)
+                    {
+                        var comment = DarkCrystal.Serialization.MessagePackBinaryExtension.ReadComment(bytes, offset, out readSize);
+                        builder.Append("//");
+                        builder.Append(comment);
+                        builder.Append("\n");
+                        builder.Append(Tabulation);
+
+                        return readSize + ToJsonCore(bytes, offset + readSize, builder);
+                    }
+
 #if NETSTANDARD
                     else if (extHeader.TypeCode == TypelessFormatter.ExtensionTypeCode)
                     {

@@ -809,6 +809,14 @@ namespace MessagePack
             }
         }
 
+        public static void ReWriteArrayHeaderDownwards(ref byte[] bytes, int offset, int count)
+        {
+            checked
+            {
+                ReWriteArrayHeaderDownwards(ref bytes, offset, (uint)count);
+            }
+        }
+
         /// <summary>
         /// Write array count.
         /// </summary>
@@ -846,6 +854,32 @@ namespace MessagePack
                     bytes[offset + 4] = (byte)(count);
                 }
                 return 5;
+            }
+        }
+
+        public static void ReWriteArrayHeaderDownwards(ref byte[] bytes, int offset, uint count)
+        {
+            if (bytes[offset] == MessagePackCode.Array32)
+            {
+                unchecked
+                {
+                    bytes[offset + 1] = (byte)(count >> 24);
+                    bytes[offset + 2] = (byte)(count >> 16);
+                    bytes[offset + 3] = (byte)(count >> 8);
+                    bytes[offset + 4] = (byte)(count);
+                }
+            }
+            else if (bytes[offset] == MessagePackCode.Array16)
+            {
+                unchecked
+                {
+                    bytes[offset + 1] = (byte)(count >> 8);
+                    bytes[offset + 2] = (byte)(count);
+                }
+            }
+            else
+            {
+                bytes[offset] = (byte)(MessagePackCode.MinFixArray | count);
             }
         }
 
